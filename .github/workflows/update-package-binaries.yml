@@ -4,39 +4,81 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to download binaries from (e.g., v26.2.5.8)'
+        description: 'Release tag from Gao-OS/mobile-BEAM-OTP (e.g., v26.2.5.8)'
         required: true
         type: string
-  release:
-    types: [published]
+  schedule:
+    # Check for new releases weekly on Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+
+env:
+  SOURCE_REPO: Gao-OS/mobile-BEAM-OTP
 
 jobs:
-  update-binaries:
-    name: Update Package Binaries from Release
+  check-release:
+    name: Check for New Release
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      should_update: ${{ steps.release.outputs.should_update }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+            echo "Using manual tag: $TAG"
+          else
+            # Get latest release from source repo
+            TAG=$(gh release list --repo ${{ env.SOURCE_REPO }} --limit 1 --json tagName --jq '.[0].tagName')
+            echo "Latest release from ${{ env.SOURCE_REPO }}: $TAG"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "Error: No release tag found"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Check if we already have a PR or commit for this tag
+          EXISTING_PR=$(gh pr list --search "update binaries from $TAG" --json number --jq 'length')
+          if [ "$EXISTING_PR" -gt 0 ]; then
+            echo "PR already exists for $TAG, skipping"
+            echo "should_update=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_update=true" >> $GITHUB_OUTPUT
+          fi
+
+  update-binaries:
+    name: Update Binaries and Create PR
+    runs-on: ubuntu-latest
+    needs: check-release
+    if: needs.check-release.outputs.should_update == 'true'
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
-
-      - name: Determine release tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          fi
+          ref: main
 
       - name: Download Android binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          echo "Downloading Android binaries for $TAG"
+          TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Downloading Android binaries for $TAG from ${{ env.SOURCE_REPO }}"
 
-          # Download android-runtime.zip from release
-          gh release download "$TAG" -p "android-runtime.zip" -O android-runtime.zip
+          # Download android-runtime.zip from source repo release
+          gh release download "$TAG" \
+            --repo ${{ env.SOURCE_REPO }} \
+            --pattern "android-runtime.zip" \
+            --output android-runtime.zip
 
           # Extract and copy to package
           unzip android-runtime.zip -d android-runtime
@@ -52,16 +94,19 @@ jobs:
 
           # Cleanup
           rm -rf android-runtime android-runtime.zip
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Download iOS xcframework
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          echo "Downloading iOS xcframework for $TAG"
+          TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Downloading iOS xcframework for $TAG from ${{ env.SOURCE_REPO }}"
 
-          # Download liberlang.xcframework.zip from release
-          gh release download "$TAG" -p "liberlang.xcframework.zip" -O liberlang.xcframework.zip
+          # Download liberlang.xcframework.zip from source repo release
+          gh release download "$TAG" \
+            --repo ${{ env.SOURCE_REPO }} \
+            --pattern "liberlang.xcframework.zip" \
+            --output liberlang.xcframework.zip
 
           # Extract and copy to package
           unzip liberlang.xcframework.zip -d ios-framework
@@ -74,8 +119,6 @@ jobs:
 
           # Cleanup
           rm -rf ios-framework liberlang.xcframework.zip
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Verify binaries
         run: |
@@ -85,18 +128,48 @@ jobs:
           echo "=== iOS xcframework ==="
           ls -lah packages/beam_vm_ios/ios/Assets/liberlang.xcframework/
 
-      - name: Commit updated binaries
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          TAG="${{ needs.check-release.outputs.tag }}"
+          BRANCH="update-binaries-$TAG"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Create branch
+          git checkout -b "$BRANCH"
+
+          # Stage changes
           git add packages/beam_vm_android/android/src/main/jniLibs/
           git add packages/beam_vm_ios/ios/Assets/liberlang.xcframework/
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
-          else
-            TAG="${{ steps.tag.outputs.tag }}"
-            git commit -m "chore(packages): update binaries from release $TAG"
-            git push
+            exit 0
           fi
+
+          # Commit and push
+          git commit -m "chore(binaries): update from mobile-BEAM-OTP $TAG"
+          git push origin "$BRANCH"
+
+          # Create PR
+          gh pr create \
+            --title "chore(binaries): update binaries from $TAG" \
+            --body "## Summary
+
+          Updates BEAM runtime binaries from [mobile-BEAM-OTP $TAG](https://github.com/${{ env.SOURCE_REPO }}/releases/tag/$TAG).
+
+          ### Changes
+          - Android: \`liberlang.a\` for arm64-v8a, armeabi-v7a, x86_64
+          - iOS: \`liberlang.xcframework\` for arm64 and simulators
+
+          ### Source
+          - Repository: https://github.com/${{ env.SOURCE_REPO }}
+          - Release: $TAG
+
+          ---
+          *Auto-generated by update-package-binaries workflow*" \
+            --base main \
+            --head "$BRANCH"
