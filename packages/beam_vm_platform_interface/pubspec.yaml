@@ -4,7 +4,6 @@ version: 1.0.0
 homepage: https://github.com/gsmlg-app/beam_vm
 repository: https://github.com/gsmlg-app/beam_vm/tree/main/packages/beam_vm_platform_interface
 issue_tracker: https://github.com/gsmlg-app/beam_vm/issues
-publisher: gsmlg.dev
 topics:
   - erlang
   - elixir
