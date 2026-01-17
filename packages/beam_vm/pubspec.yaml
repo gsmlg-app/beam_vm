@@ -1,6 +1,6 @@
 name: beam_vm
 description: Flutter plugin to embed and run the Erlang/Elixir BEAM VM on Android and iOS.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/gsmlg-app/beam_vm
 repository: https://github.com/gsmlg-app/beam_vm/tree/main/packages/beam_vm
 issue_tracker: https://github.com/gsmlg-app/beam_vm/issues
@@ -19,9 +19,9 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  beam_vm_platform_interface: ^1.0.0
-  beam_vm_android: ^1.0.0
-  beam_vm_ios: ^1.0.0
+  beam_vm_platform_interface: ^1.0.1
+  beam_vm_android: ^1.0.1
+  beam_vm_ios: ^1.0.1
 
 dev_dependencies:
   flutter_test:

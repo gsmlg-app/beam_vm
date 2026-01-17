@@ -1,6 +1,6 @@
 name: beam_vm_platform_interface
 description: A common platform interface for the beam_vm plugin.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/gsmlg-app/beam_vm
 repository: https://github.com/gsmlg-app/beam_vm/tree/main/packages/beam_vm_platform_interface
 issue_tracker: https://github.com/gsmlg-app/beam_vm/issues
