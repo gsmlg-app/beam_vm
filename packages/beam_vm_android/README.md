@@ -16,7 +16,7 @@ This package bundles pre-compiled `liberlang.a` static libraries for:
 - `arm64-v8a` (64-bit ARM)
 - `x86_64` (Intel/AMD 64-bit emulators)
 
-The binaries are approximately 41 MB total and are bundled from [beam_vm releases](https://github.com/gsmlg-app/beam_vm/releases).
+The binaries are approximately 41 MB total and are sourced from [mobile-BEAM-OTP](https://github.com/Gao-OS/mobile-BEAM-OTP) releases.
 
 ## Requirements
 

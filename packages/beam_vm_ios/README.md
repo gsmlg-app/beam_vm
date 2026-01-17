@@ -15,7 +15,7 @@ This package bundles `liberlang.xcframework` containing pre-compiled static libr
 - `ios-arm64` (64-bit ARM devices)
 - `ios-arm64_x86_64-simulator` (M1/M2 and Intel simulators)
 
-The xcframework is approximately 32 MB and is bundled from [beam_vm releases](https://github.com/gsmlg-app/beam_vm/releases).
+The xcframework is approximately 32 MB and is sourced from [mobile-BEAM-OTP](https://github.com/Gao-OS/mobile-BEAM-OTP) releases.
 
 ## Requirements
 
