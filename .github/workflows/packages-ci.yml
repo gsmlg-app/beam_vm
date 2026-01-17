@@ -1,22 +1,27 @@
-name: Packages CI
+name: CI
 
 on:
   push:
-    branches: [OTP-26, OTP-27, OTP-28]
+    branches: [main]
     paths:
       - 'packages/**'
       - 'pubspec.yaml'
+      - 'melos.yaml'
       - '.github/workflows/packages-ci.yml'
   pull_request:
-    branches: [OTP-26, OTP-27, OTP-28]
     paths:
       - 'packages/**'
       - 'pubspec.yaml'
+      - 'melos.yaml'
       - '.github/workflows/packages-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  analyze-and-test:
-    name: Analyze & Test
+  analyze:
+    name: Analyze
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +30,7 @@ jobs:
         with:
           flutter-version: '3.38.6'
           channel: 'stable'
+          cache: true
 
       - name: Install melos
         run: dart pub global activate melos
@@ -34,6 +40,39 @@ jobs:
 
       - name: Analyze all packages
         run: melos run analyze
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Check formatting
+        run: dart format --set-exit-if-changed packages/
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap packages
+        run: melos bs
 
       - name: Run all tests
         run: melos run test
@@ -48,6 +87,7 @@ jobs:
         with:
           flutter-version: '3.38.6'
           channel: 'stable'
+          cache: true
 
       - name: Install melos
         run: dart pub global activate melos
@@ -58,6 +98,46 @@ jobs:
       - name: Dry run publish
         run: melos run publish:dry-run
 
-  # NOTE: build-example job is removed because it requires BEAM runtime binaries
-  # which are not included in the repository (Git LFS pointers only).
-  # Use flutter-plugin-integration.yml workflow to test with actual binaries.
+  pana:
+    name: Pana Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - beam_vm
+          - beam_vm_android
+          - beam_vm_ios
+          - beam_vm_platform_interface
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap packages
+        run: melos bs
+
+      - name: Install pana
+        run: dart pub global activate pana
+
+      - name: Run pana on ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          pana --no-warning . 2>&1 | tee pana-report.txt
+          SCORE=$(grep -oP 'Points: \K[0-9]+' pana-report.txt | head -1 || echo "0")
+          echo "Pana score for ${{ matrix.package }}: $SCORE/160"
+          if [ "$SCORE" -lt 100 ]; then
+            echo "::warning::Pana score ($SCORE) is below threshold (100)"
+          fi
+
+      - name: Upload pana report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pana-report-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/pana-report.txt
