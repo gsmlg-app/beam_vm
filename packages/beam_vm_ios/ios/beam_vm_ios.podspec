@@ -10,9 +10,9 @@ iOS implementation of the beam_vm Flutter plugin for embedding and running
 the Erlang/Elixir BEAM virtual machine on iOS devices.
 Bundles liberlang.xcframework for arm64 devices and simulators.
                        DESC
-  s.homepage         = 'https://github.com/Gao-OS/mobile-BEAM-OTP'
+  s.homepage         = 'https://github.com/gsmlg-app/beam_vm'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Gao-OS' => 'noreply@gao-os.io' }
+  s.author           = { 'gsmlg-app' => 'noreply@gsmlg.org' }
   s.source           = { :path => '.' }
 
   # Source files

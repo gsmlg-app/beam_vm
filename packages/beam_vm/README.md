@@ -78,7 +78,7 @@ To run Elixir code, you need to bundle a release in your app's assets:
 2. Copy the release to your app's assets directory
 3. Extract it at runtime and pass the path to `initialize()`
 
-See the [example app](https://github.com/Gao-OS/mobile-BEAM-OTP/tree/main/packages/beam_vm_example) for a complete demonstration.
+See the [example app](https://github.com/gsmlg-app/beam_vm/tree/main/packages/beam_vm_example) for a complete demonstration.
 
 ## Requirements
 

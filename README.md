@@ -41,7 +41,7 @@ await beamVm.start();
 
 ## Bundled Binaries
 
-The platform packages bundle pre-compiled `liberlang.a` static libraries from [mobile-BEAM-OTP](https://github.com/Gao-OS/mobile-BEAM-OTP) releases.
+The platform packages bundle pre-compiled `liberlang.a` static libraries from [beam_vm releases](https://github.com/gsmlg-app/beam_vm/releases).
 
 **Android architectures:**
 - `armeabi-v7a` (32-bit ARM)
