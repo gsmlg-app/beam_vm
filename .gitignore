@@ -1,0 +1,37 @@
+# Dart/Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+
+# Pub
+pubspec.lock
+.pub-cache/
+.pub/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
+# Platform specific
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/android/.gradle/
+**/android/local.properties
+
+# Coverage
+coverage/
+*.lcov
+
+# Melos
+.melos_tool/
+
+# macOS
+.DS_Store

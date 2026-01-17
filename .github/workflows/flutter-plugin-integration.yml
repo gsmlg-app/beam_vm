@@ -1,0 +1,247 @@
+name: "Flutter Plugin Integration Tests"
+
+# NOTE: Integration tests require liberlang runtime which must be downloaded
+# from releases. These tests verify the full plugin stack works with the
+# actual BEAM VM binaries.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to test"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+      release_tag:
+        description: "Release tag for runtime (e.g., OTP-28.3)"
+        required: false
+        default: "OTP-28.3"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: "Prepare"
+    runs-on: ubuntu-latest
+    outputs:
+      release-tag: ${{ steps.config.outputs.release-tag }}
+    steps:
+      - name: Set configuration
+        id: config
+        run: |
+          TAG="${{ github.event.inputs.release_tag || 'OTP-28.3' }}"
+          echo "release-tag=${TAG}" >> $GITHUB_OUTPUT
+
+  android:
+    name: "Android Integration Test"
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android' }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Android runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd /tmp
+          gh release download "${{ needs.prepare.outputs.release-tag }}" \
+            --pattern "android-otp-*.tar.gz" \
+            --repo ${{ github.repository }}
+          tar -xzf android-otp-*.tar.gz
+          echo "Downloaded Android runtime:"
+          ls -la
+
+      - name: Setup liberlang for Android
+        run: |
+          mkdir -p packages/beam_vm_example/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p packages/beam_vm_example/android/app/src/main/jniLibs/armeabi-v7a
+          mkdir -p packages/beam_vm_example/android/app/src/main/jniLibs/x86_64
+
+          # Copy liberlang.a to jniLibs (the CMake will find and link it)
+          cp /tmp/arm64-v8a/liberlang.a packages/beam_vm_example/android/app/src/main/jniLibs/arm64-v8a/
+          cp /tmp/armeabi-v7a/liberlang.a packages/beam_vm_example/android/app/src/main/jniLibs/armeabi-v7a/
+          cp /tmp/x86_64/liberlang.a packages/beam_vm_example/android/app/src/main/jniLibs/x86_64/
+
+          echo "Installed Android runtime libraries:"
+          find packages/beam_vm_example/android/app/src/main/jniLibs -name "*.a"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.6"
+          channel: "stable"
+          cache: true
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap
+        run: melos bs
+
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          working-directory: packages/beam_vm_example
+          script: flutter test integration_test/plugin_integration_test.dart
+
+  ios:
+    name: "iOS Integration Test"
+    runs-on: macos-latest
+    needs: [prepare]
+    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download iOS runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd /tmp
+          gh release download "${{ needs.prepare.outputs.release-tag }}" \
+            --pattern "ios-otp-*.tar.gz" \
+            --repo ${{ github.repository }}
+          tar -xzf ios-otp-*.tar.gz
+          echo "Downloaded iOS runtime:"
+          ls -la
+
+      - name: Setup liberlang.xcframework for iOS
+        run: |
+          # Copy xcframework to example app
+          cp -R /tmp/liberlang.xcframework packages/beam_vm_example/ios/
+
+          echo "Installed iOS runtime framework:"
+          ls -la packages/beam_vm_example/ios/liberlang.xcframework/
+
+      - name: Fix xcframework library filenames
+        run: |
+          # The xcframework may have incorrectly named library files (e.g., "2402-liberlang.a")
+          # which prevents the linker from finding them with -lerlang flag.
+          # Rename to liberlang.a and update Info.plist accordingly.
+          cd packages/beam_vm_example/ios/liberlang.xcframework
+
+          for slice in ios-arm64 ios-arm64_x86_64-simulator; do
+            if [ -d "$slice" ]; then
+              cd "$slice"
+              # Find any file matching *-liberlang.a or *liberlang.a that isn't liberlang.a
+              for f in *liberlang.a; do
+                if [ -f "$f" ] && [ "$f" != "liberlang.a" ]; then
+                  echo "Renaming $slice/$f -> liberlang.a"
+                  mv "$f" liberlang.a
+                fi
+              done
+              cd ..
+            fi
+          done
+
+          # Update Info.plist to reference correct filename
+          if [ -f Info.plist ]; then
+            sed -i '' 's|<string>[^<]*liberlang\.a</string>|<string>liberlang.a</string>|g' Info.plist
+            echo "Updated Info.plist:"
+            cat Info.plist
+          fi
+
+          echo "Final xcframework structure:"
+          find . -name "*.a" -exec ls -la {} \;
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.6"
+          channel: "stable"
+          cache: true
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap
+        run: melos bs
+
+      - name: List available simulators
+        run: xcrun simctl list devices available
+
+      - name: Boot iOS Simulator
+        run: |
+          # Find any iPhone Pro simulator
+          SIMULATOR_ID=$(xcrun simctl list devices available | grep -E "iPhone [0-9]+ Pro[^M]" | head -1 | grep -oE "[A-F0-9-]{36}")
+          if [ -z "$SIMULATOR_ID" ]; then
+            # Fallback: any iPhone simulator
+            SIMULATOR_ID=$(xcrun simctl list devices available | grep "iPhone" | head -1 | grep -oE "[A-F0-9-]{36}")
+          fi
+          if [ -z "$SIMULATOR_ID" ]; then
+            echo "Error: No iPhone simulator found"
+            exit 1
+          fi
+          echo "Found simulator: $SIMULATOR_ID"
+          echo "SIMULATOR_ID=$SIMULATOR_ID" >> $GITHUB_ENV
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          sleep 10
+
+      - name: Run integration tests
+        working-directory: packages/beam_vm_example
+        run: |
+          flutter test integration_test/plugin_integration_test.dart -d "$SIMULATOR_ID"
+
+      - name: Shutdown iOS Simulator
+        if: always()
+        run: |
+          xcrun simctl shutdown "$SIMULATOR_ID" || true
+
+  summary:
+    name: "Summary"
+    runs-on: ubuntu-latest
+    needs: [android, ios]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "## Flutter Plugin Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.android.result }}" == "success" ]]; then
+            echo "- :white_check_mark: Android tests passed" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.android.result }}" == "failure" ]]; then
+            echo "- :x: Android tests failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- :warning: Android tests skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.ios.result }}" == "success" ]]; then
+            echo "- :white_check_mark: iOS tests passed" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.ios.result }}" == "failure" ]]; then
+            echo "- :x: iOS tests failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- :warning: iOS tests skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Fail if any tests failed
+        if: needs.android.result == 'failure' || needs.ios.result == 'failure'
+        run: exit 1

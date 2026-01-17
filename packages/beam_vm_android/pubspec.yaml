@@ -1,0 +1,36 @@
+name: beam_vm_android
+description: Android implementation of the beam_vm plugin with bundled BEAM runtime.
+version: 1.0.0
+homepage: https://github.com/gsmlg-app/beam_vm
+repository: https://github.com/gsmlg-app/beam_vm/tree/main/packages/beam_vm_android
+issue_tracker: https://github.com/gsmlg-app/beam_vm/issues
+publisher: gsmlg.dev
+topics:
+  - erlang
+  - elixir
+  - beam-vm
+  - embedded-runtime
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  beam_vm_platform_interface: ^1.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  plugin:
+    implements: beam_vm
+    platforms:
+      android:
+        package: io.beamvm.beam_vm_android
+        pluginClass: BeamVmAndroidPlugin

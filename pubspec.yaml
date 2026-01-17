@@ -1,0 +1,57 @@
+name: beam_vm_workspace
+description: Flutter plugin workspace for beam_vm - Erlang/Elixir BEAM VM on mobile
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+workspace:
+  - packages/beam_vm_platform_interface
+  - packages/beam_vm_android
+  - packages/beam_vm_ios
+  - packages/beam_vm
+  - packages/beam_vm_example
+
+dev_dependencies:
+  melos: ^7.0.0
+
+melos:
+  name: beam_vm
+
+  command:
+    version:
+      updateGitTagRefs: true
+      workspaceChangelog: true
+
+  scripts:
+    analyze:
+      description: Analyze all packages
+      run: melos exec -- flutter analyze
+
+    test:
+      description: Run tests in all packages
+      run: melos exec --fail-fast -- flutter test
+
+    format:
+      description: Format all Dart code
+      run: melos exec -- dart format .
+
+    clean:
+      description: Clean all packages
+      run: melos exec -- flutter clean
+
+    publish:dry-run:
+      description: Dry run publish for all packages
+      run: melos exec --no-private -- flutter pub publish --dry-run
+
+    build:example:android:
+      description: Build Android example app
+      exec: flutter build apk --debug
+      packageFilters:
+        scope: beam_vm_example
+
+    build:example:ios:
+      description: Build iOS example app
+      exec: flutter build ios --no-codesign --debug
+      packageFilters:
+        scope: beam_vm_example

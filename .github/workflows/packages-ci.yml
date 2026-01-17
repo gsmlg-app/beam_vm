@@ -1,0 +1,63 @@
+name: Packages CI
+
+on:
+  push:
+    branches: [OTP-26, OTP-27, OTP-28]
+    paths:
+      - 'packages/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/packages-ci.yml'
+  pull_request:
+    branches: [OTP-26, OTP-27, OTP-28]
+    paths:
+      - 'packages/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/packages-ci.yml'
+
+jobs:
+  analyze-and-test:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap packages
+        run: melos bs
+
+      - name: Analyze all packages
+        run: melos run analyze
+
+      - name: Run all tests
+        run: melos run test
+
+  publish-dry-run:
+    name: Publish Dry Run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap packages
+        run: melos bs
+
+      - name: Dry run publish
+        run: melos run publish:dry-run
+
+  # NOTE: build-example job is removed because it requires BEAM runtime binaries
+  # which are not included in the repository (Git LFS pointers only).
+  # Use flutter-plugin-integration.yml workflow to test with actual binaries.

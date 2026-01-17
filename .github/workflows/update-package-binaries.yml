@@ -1,0 +1,102 @@
+name: Update Package Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to download binaries from (e.g., v26.2.5.8)'
+        required: true
+        type: string
+  release:
+    types: [published]
+
+jobs:
+  update-binaries:
+    name: Update Package Binaries from Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Android binaries
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          echo "Downloading Android binaries for $TAG"
+
+          # Download android-runtime.zip from release
+          gh release download "$TAG" -p "android-runtime.zip" -O android-runtime.zip
+
+          # Extract and copy to package
+          unzip android-runtime.zip -d android-runtime
+
+          # Copy liberlang.a files to package
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p "packages/beam_vm_android/android/src/main/jniLibs/$ABI"
+            if [ -f "android-runtime/$ABI/liberlang.a" ]; then
+              cp "android-runtime/$ABI/liberlang.a" "packages/beam_vm_android/android/src/main/jniLibs/$ABI/"
+              echo "Copied liberlang.a for $ABI"
+            fi
+          done
+
+          # Cleanup
+          rm -rf android-runtime android-runtime.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download iOS xcframework
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          echo "Downloading iOS xcframework for $TAG"
+
+          # Download liberlang.xcframework.zip from release
+          gh release download "$TAG" -p "liberlang.xcframework.zip" -O liberlang.xcframework.zip
+
+          # Extract and copy to package
+          unzip liberlang.xcframework.zip -d ios-framework
+
+          # Copy xcframework to package
+          rm -rf "packages/beam_vm_ios/ios/Assets/liberlang.xcframework"
+          mkdir -p "packages/beam_vm_ios/ios/Assets"
+          cp -r ios-framework/liberlang.xcframework "packages/beam_vm_ios/ios/Assets/"
+          echo "Copied liberlang.xcframework"
+
+          # Cleanup
+          rm -rf ios-framework liberlang.xcframework.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify binaries
+        run: |
+          echo "=== Android binaries ==="
+          ls -lah packages/beam_vm_android/android/src/main/jniLibs/*/
+
+          echo "=== iOS xcframework ==="
+          ls -lah packages/beam_vm_ios/ios/Assets/liberlang.xcframework/
+
+      - name: Commit updated binaries
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add packages/beam_vm_android/android/src/main/jniLibs/
+          git add packages/beam_vm_ios/ios/Assets/liberlang.xcframework/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            TAG="${{ steps.tag.outputs.tag }}"
+            git commit -m "chore(packages): update binaries from release $TAG"
+            git push
+          fi

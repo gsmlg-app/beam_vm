@@ -1,0 +1,286 @@
+name: Publish Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (no actual publish)'
+        required: false
+        type: boolean
+        default: false
+
+# Required for pub.dev OIDC authentication
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - name: Validate version format
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Invalid version format. Expected: X.Y.Z or X.Y.Z-prerelease"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "✓ Version $VERSION is valid"
+
+  update-versions:
+    name: Update Package Versions
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Update versions in pubspec.yaml files
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          # Update each package's pubspec.yaml
+          for pkg in beam_vm_platform_interface beam_vm_android beam_vm_ios beam_vm; do
+            PUBSPEC="packages/$pkg/pubspec.yaml"
+            echo "Updating $PUBSPEC to version $VERSION"
+            sed -i "s/^version: .*/version: $VERSION/" "$PUBSPEC"
+          done
+
+          # Update inter-package dependency versions
+          for pkg in beam_vm_android beam_vm_ios beam_vm; do
+            PUBSPEC="packages/$pkg/pubspec.yaml"
+            sed -i "s/beam_vm_platform_interface: .*/beam_vm_platform_interface: ^$VERSION/" "$PUBSPEC"
+          done
+
+          # Update beam_vm's platform package dependencies
+          PUBSPEC="packages/beam_vm/pubspec.yaml"
+          sed -i "s/beam_vm_android: .*/beam_vm_android: ^$VERSION/" "$PUBSPEC"
+          sed -i "s/beam_vm_ios: .*/beam_vm_ios: ^$VERSION/" "$PUBSPEC"
+
+      - name: Verify changes
+        run: |
+          echo "=== Updated pubspec.yaml files ==="
+          for pkg in beam_vm_platform_interface beam_vm_android beam_vm_ios beam_vm; do
+            echo "--- packages/$pkg/pubspec.yaml ---"
+            grep -E "^(version:|  beam_vm)" "packages/$pkg/pubspec.yaml" || true
+          done
+
+      - name: Commit version updates
+        if: ${{ !inputs.dry_run }}
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/*/pubspec.yaml
+          git commit -m "chore(release): bump version to $VERSION"
+          git push
+
+      - name: Upload updated packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-packages
+          path: packages/
+          retention-days: 1
+
+  publish-platform-interface:
+    name: Publish Platform Interface
+    runs-on: ubuntu-latest
+    needs: [validate, update-versions]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-packages
+          path: packages/
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: packages/beam_vm_platform_interface
+        run: flutter pub get
+
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/beam_vm_platform_interface
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/beam_vm_platform_interface
+        run: dart pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
+
+  publish-android:
+    name: Publish Android
+    runs-on: ubuntu-latest
+    needs: [validate, publish-platform-interface]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-packages
+          path: packages/
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: packages/beam_vm_android
+        run: flutter pub get
+
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/beam_vm_android
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/beam_vm_android
+        run: dart pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
+
+  publish-ios:
+    name: Publish iOS
+    runs-on: ubuntu-latest
+    needs: [validate, publish-platform-interface]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-packages
+          path: packages/
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: packages/beam_vm_ios
+        run: flutter pub get
+
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/beam_vm_ios
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/beam_vm_ios
+        run: dart pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
+
+  publish-app-facing:
+    name: Publish App-Facing Package
+    runs-on: ubuntu-latest
+    needs: [validate, publish-android, publish-ios]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: updated-packages
+          path: packages/
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: packages/beam_vm
+        run: flutter pub get
+
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/beam_vm
+        run: flutter pub publish --dry-run
+
+      - name: Publish to pub.dev
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/beam_vm
+        run: dart pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish-app-facing]
+    if: ${{ !inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: git pull origin ${{ github.ref_name }}
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TAG="beam_vm-v$VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "Release beam_vm v$VERSION"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: beam_vm-v${{ needs.validate.outputs.version }}
+          name: beam_vm v${{ needs.validate.outputs.version }}
+          body: |
+            ## Flutter Packages Published
+
+            | Package | Version | pub.dev |
+            |---------|---------|---------|
+            | beam_vm | ${{ needs.validate.outputs.version }} | [pub.dev](https://pub.dev/packages/beam_vm) |
+            | beam_vm_android | ${{ needs.validate.outputs.version }} | [pub.dev](https://pub.dev/packages/beam_vm_android) |
+            | beam_vm_ios | ${{ needs.validate.outputs.version }} | [pub.dev](https://pub.dev/packages/beam_vm_ios) |
+            | beam_vm_platform_interface | ${{ needs.validate.outputs.version }} | [pub.dev](https://pub.dev/packages/beam_vm_platform_interface) |
+
+            ## Installation
+
+            ```yaml
+            dependencies:
+              beam_vm: ^${{ needs.validate.outputs.version }}
+            ```
+
+            ## BEAM Runtime
+
+            Bundled with Erlang/OTP 28.3 BEAM virtual machine binaries.
+          draft: false
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
