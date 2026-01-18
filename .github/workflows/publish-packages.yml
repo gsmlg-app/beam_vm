@@ -87,8 +87,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add packages/*/pubspec.yaml
-          git commit -m "chore(release): bump version to $VERSION"
-          git push
+          if git diff --staged --quiet; then
+            echo "No version changes needed - already at $VERSION"
+          else
+            git commit -m "chore(release): bump version to $VERSION"
+            git push
+          fi
 
       - name: Upload updated packages
         uses: actions/upload-artifact@v4
@@ -127,8 +131,6 @@ jobs:
         if: ${{ !inputs.dry_run }}
         working-directory: packages/beam_vm_platform_interface
         run: dart pub publish --force
-        env:
-          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
 
   publish-android:
     name: Publish Android
@@ -162,8 +164,6 @@ jobs:
         if: ${{ !inputs.dry_run }}
         working-directory: packages/beam_vm_android
         run: dart pub publish --force
-        env:
-          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
 
   publish-ios:
     name: Publish iOS
@@ -197,8 +197,6 @@ jobs:
         if: ${{ !inputs.dry_run }}
         working-directory: packages/beam_vm_ios
         run: dart pub publish --force
-        env:
-          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
 
   publish-app-facing:
     name: Publish App-Facing Package
@@ -230,8 +228,6 @@ jobs:
         if: ${{ !inputs.dry_run }}
         working-directory: packages/beam_vm
         run: dart pub publish --force
-        env:
-          PUB_TOKEN: ${{ secrets.PUB_DEV_TOKEN }}
 
   create-release:
     name: Create GitHub Release
