@@ -105,6 +105,9 @@ jobs:
     name: Publish Platform Interface
     runs-on: ubuntu-latest
     needs: [validate, update-versions]
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -136,6 +139,9 @@ jobs:
     name: Publish Android
     runs-on: ubuntu-latest
     needs: [validate, publish-platform-interface]
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -169,6 +175,9 @@ jobs:
     name: Publish iOS
     runs-on: ubuntu-latest
     needs: [validate, publish-platform-interface]
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -202,6 +211,9 @@ jobs:
     name: Publish App-Facing Package
     runs-on: ubuntu-latest
     needs: [validate, publish-android, publish-ios]
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
