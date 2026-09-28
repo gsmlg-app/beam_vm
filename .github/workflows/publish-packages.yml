@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -95,7 +95,7 @@ jobs:
           fi
 
       - name: Upload updated packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: updated-packages
           path: packages/
@@ -106,9 +106,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, update-versions]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: updated-packages
           path: packages/
@@ -143,11 +143,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, publish-platform-interface]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: updated-packages
           path: packages/
@@ -182,11 +182,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, publish-platform-interface]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: updated-packages
           path: packages/
@@ -221,9 +221,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, publish-android, publish-ios]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: updated-packages
           path: packages/
@@ -259,7 +259,7 @@ jobs:
     needs: [validate, publish-app-facing]
     if: ${{ !inputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -278,7 +278,7 @@ jobs:
           git push origin "$TAG"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: beam_vm-v${{ needs.validate.outputs.version }}
           name: beam_vm v${{ needs.validate.outputs.version }}

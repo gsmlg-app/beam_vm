@@ -22,7 +22,7 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       should_update: ${{ steps.release.outputs.should_update }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Get release tag
         id: release
@@ -63,7 +63,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
 
